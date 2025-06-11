@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Crear Nueva Cama</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 2rem auto; }
+        form { display: flex; flex-direction: column; gap: 1rem; }
+        label { font-weight: bold; }
+        input, select, button { padding: 0.5rem; font-size: 1rem; }
+        button { background-color: #28a745; color: white; border: none; cursor: pointer; }
+        #status-message { margin-top: 1rem; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>Nueva Cama</h1>
+
+    <form id="cama-form">
+        <div>
+            <label for="bedCode-input">Código de Cama:</label>
+            <input type="text" id="bedCode-input" name="bedCode" required>
+        </div>
+        <div>
+            <label for="careunit-select">Unidad de Cuidado:</label>
+            <select id="careunit-select" name="careunit" required>
+                <option value="">Cargando unidades...</option>
+            </select>
+        </div>
+
+        <button type="submit">Guardar Cama</button>
+    </form>
+
+    <div id="status-message"></div>
+
+    <script>
+        // --- LÓGICA JAVASCRIPT ---
+
+        // 1. DEFINIR ENDPOINTS DE LA API
+        const API_BASE_URL = 'http://127.0.0.1:8000'; // Cambia esto si es necesario
+        const CAREUNITS_LIST_URL = `${API_BASE_URL}/Catalogos/UnidadesCuidados/lookup/`; // URL para GET de unidades
+        const BEDS_CREATE_URL = `${API_BASE_URL}/Catalogos/Camas/`; // URL para POST de camas
+
+        // 2. OBTENER LA LISTA DE UNIDADES Y LLENAR EL SELECTOR (GET)
+        async function poblarSelectorDeUnidades() {
+            const selectElement = document.getElementById('careunit-select');
+            try {
+                // AÑADE ESTA LÍNEA PARA DEPURAR
+                console.log("Intentando llamar a la URL:", CAREUNITS_LIST_URL);
+                const response = await fetch(CAREUNITS_LIST_URL);
+                if (!response.ok) throw new Error('Error de red');
+
+                const data = await response.json();
+                // Asumiendo que la respuesta paginada tiene los datos en 'results'
+                const unidades = data.results || data;
+
+                selectElement.innerHTML = '<option value="">-- Seleccione una unidad --</option>';
+
+                unidades.forEach(unidad => {
+                    const option = document.createElement('option');
+                    option.value = unidad.idCareunit; // VALOR INTERNO = ID
+                    option.textContent = unidad.nameCareUnit; // TEXTO VISIBLE = NOMBRE
+                    selectElement.appendChild(option);
+                });
+
+            } catch (error) {
+                console.error('Error al cargar las unidades de cuidado:', error);
+                selectElement.innerHTML = '<option value="">Error al cargar opciones</option>';
+            }
+        }
+
+        // 3. MANEJAR EL ENVÍO DEL FORMULARIO (POST)
+        async function manejarEnvioDeFormulario(event) {
+            event.preventDefault();
+            const statusMessageElement = document.getElementById('status-message');
+            statusMessageElement.textContent = 'Guardando...';
+
+            const bedCode = document.getElementById('bedCode-input').value;
+            const careUnitId = document.getElementById('careunit-select').value;
+
+            if (!careUnitId) {
+                statusMessageElement.textContent = 'Por favor, seleccione una unidad de cuidado.';
+                statusMessageElement.style.color = 'red';
+                return;
+            }
+
+            // El objeto que enviaremos al backend. ¡Las claves deben coincidir con el BedWriteSerializer!
+            const datosCama = {
+                bedCode: bedCode,
+                CareUnitFK: parseInt(careUnitId) // <-- Enviamos el ID
+            };
+
+            try {
+                const response = await fetch(BEDS_CREATE_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(datosCama)
+                });
+
+                const responseData = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(JSON.stringify(responseData));
+                }
+
+                statusMessageElement.textContent = `¡Cama "${responseData.bedCode}" creada exitosamente en la unidad "${responseData.NombreUnidadCuidado}"!`;
+                statusMessageElement.style.color = 'green';
+                document.getElementById('cama-form').reset();
+
+            } catch (error) {
+                console.error('Error al guardar la cama:', error);
+                statusMessageElement.textContent = `Error al guardar: ${error.message}`;
+                statusMessageElement.style.color = 'red';
+            }
+        }
+
+        // 4. "CONECTAR" LAS FUNCIONES A LA PÁGINA
+        document.addEventListener('DOMContentLoaded', poblarSelectorDeUnidades);
+        document.getElementById('cama-form').addEventListener('submit', manejarEnvioDeFormulario);
+    </script>
+</body>
+</html>

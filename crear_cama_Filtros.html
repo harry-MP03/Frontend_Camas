@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Crear Nueva Cama</title>
+    <style>
+        body { font-family: sans-serif; max-width: 600px; margin: 2rem auto; }
+        form { display: flex; flex-direction: column; gap: 1rem; }
+        label { font-weight: bold; }
+        input, button { padding: 0.5rem; font-size: 1rem; }
+        button { background-color: #28a745; color: white; border: none; cursor: pointer; }
+        #search-results { border: 1px solid #ccc; max-height: 150px; overflow-y: auto; margin-top: 5px; }
+        #search-results div { padding: 8px; cursor: pointer; }
+        #search-results div:hover { background-color: #f0f0f0; }
+        #status-message { margin-top: 1rem; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>Nueva Cama</h1>
+
+    <form id="cama-form">
+        <div>
+            <label for="bedCode-input">Código de Cama:</label>
+            <input type="text" id="bedCode-input" name="bedCode" required>
+        </div>
+        <div>
+            <label for="careunit-search">Buscar Unidad de Cuidado:</label>
+            <input type="text" id="careunit-search" placeholder="Escribe para buscar...">
+            <div id="search-results"></div>
+            <input type="hidden" id="careunit-id-hidden" name="careunit-id" required>
+        </div>
+
+        <button type="submit">Guardar Cama</button>
+    </form>
+
+    <div id="status-message"></div>
+
+    <script>
+        // DEFINIR ENDPOINTS
+        const API_BASE_URL = 'http://127.0.0.1:8000';
+        const CAREUNITS_LOOKUP_URL = `${API_BASE_URL}/Catalogos/UnidadesCuidados/lookup/`;
+        const BEDS_CREATE_URL = `${API_BASE_URL}/Catalogos/Camas/`;
+
+        // OBTENER REFERENCIAS A ELEMENTOS DEL DOM
+        const searchInput = document.getElementById('careunit-search');
+        const resultsDiv = document.getElementById('search-results');
+        const hiddenIdInput = document.getElementById('careunit-id-hidden');
+
+        // FUNCIÓN PARA BUSCAR UNIDADES EN LA API
+        async function buscarUnidades(terminoDeBusqueda) {
+            // Construimos la URL con el parámetro de búsqueda
+            const url = `${CAREUNITS_LOOKUP_URL}?search=${encodeURIComponent(terminoDeBusqueda)}`;
+            console.log("Buscando en:", url);
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) throw new Error('Error de red');
+
+                const unidades = await response.json();
+
+                // Limpiamos resultados anteriores
+                resultsDiv.innerHTML = '';
+
+                if (unidades.length === 0) {
+                    resultsDiv.innerHTML = '<div>No se encontraron resultados</div>';
+                    return;
+                }
+
+                // Mostramos los nuevos resultados
+                unidades.forEach(unidad => {
+                    const resultItem = document.createElement('div');
+                    resultItem.textContent = unidad.nameCareUnit;
+                    // Guardamos el ID en un atributo de datos
+                    resultItem.dataset.id = unidad.idCareunit;
+                    resultsDiv.appendChild(resultItem);
+                });
+            } catch (error) {
+                console.error('Error durante la búsqueda:', error);
+                resultsDiv.innerHTML = '<div>Error al buscar</div>';
+            }
+        }
+
+        // EVENTO: CADA VEZ QUE EL USUARIO ESCRIBE EN EL BUSCADOR
+        let debounceTimer;
+        searchInput.addEventListener('input', (event) => {
+            const terminoDeBusqueda = event.target.value;
+
+            // "Debounce": Espera 300ms después de que el usuario deja de escribir para no hacer demasiadas llamadas a la API
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                if (terminoDeBusqueda.length > 1) {
+                    buscarUnidades(terminoDeBusqueda);
+                } else {
+                    resultsDiv.innerHTML = ''; // Limpia si la búsqueda es muy corta
+                }
+            }, 300);
+        });
+
+        // EVENTO: CUANDO EL USUARIO HACE CLIC EN UN RESULTADO
+        resultsDiv.addEventListener('click', (event) => {
+            // Verificamos que se hizo clic en un item de resultado
+            if (event.target && event.target.dataset.id) {
+                const selectedId = event.target.dataset.id;
+                const selectedName = event.target.textContent;
+
+                // Ponemos el nombre en el buscador y el ID en el campo oculto
+                searchInput.value = selectedName;
+                hiddenIdInput.value = selectedId;
+
+                // Escondemos la lista de resultados
+                resultsDiv.innerHTML = '';
+            }
+        });
+
+        // EVENTO: MANEJAR ENVÍO DEL FORMULARIO (POST)
+        document.getElementById('cama-form').addEventListener('submit', async (event) => {
+            event.preventDefault();
+            const statusMessageElement = document.getElementById('status-message');
+
+            const bedCode = document.getElementById('bedCode-input').value;
+            const careUnitId = hiddenIdInput.value;
+
+            if (!careUnitId) {
+                statusMessageElement.textContent = 'Por favor, busque y seleccione una unidad de cuidado.';
+                return;
+            }
+
+            const datosCama = {
+                bedCode: bedCode,
+                CareUnitFK: parseInt(careUnitId)
+            };
+
+            // Lógica POST (igual que antes)
+            // ... (aquí iría el fetch para BEDS_CREATE_URL)
+            statusMessageElement.textContent = `Simulando guardado: Cama '${bedCode}' en Unidad ID '${careUnitId}'`;
+            console.log("Enviando al backend:", datosCama);
+        });
+    </script>
+</body>
+</html>
