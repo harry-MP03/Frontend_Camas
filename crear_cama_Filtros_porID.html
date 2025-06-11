@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Crear Nueva Cama</title>
+    <style>
+        /* Estilos generales */
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            max-width: 600px;
+            margin: 2rem auto;
+            background-color: #f7f7f7;
+            color: #333;
+        }
+        h1 {
+            color: #1a1a1a;
+        }
+        form {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem; /* Un poco más de espacio */
+            background-color: #fff;
+            padding: 2rem;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        label {
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            display: block;
+        }
+        input[type="text"], button {
+            padding: 0.75rem;
+            font-size: 1rem;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            color: white;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button[type="submit"] {
+             background-color: #28a745;
+        }
+        button[type="submit"]:hover {
+             background-color: #218838;
+        }
+
+        /* Estilos para nuestro componente de búsqueda con botón */
+        .search-container {
+            display: flex;
+            gap: 0.5rem; /* Espacio entre el input y el botón */
+        }
+        .search-container input {
+            flex-grow: 1; /* El input ocupa el espacio restante */
+        }
+        .search-container button {
+            background-color: #007bff;
+            flex-shrink: 0; /* Evita que el botón se encoja */
+        }
+        .search-container button:hover {
+            background-color: #0056b3;
+        }
+
+        .searchable-select {
+            position: relative;
+        }
+        #careunit-results {
+            display: none; /* Oculto por defecto */
+            position: absolute;
+            border: 1px solid #ccc;
+            border-top: none;
+            z-index: 99;
+            top: 100%;
+            left: 0;
+            right: 0;
+            background-color: white;
+            max-height: 150px;
+            overflow-y: auto;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            border-radius: 0 0 4px 4px;
+        }
+        #careunit-results div {
+            padding: 10px;
+            cursor: pointer;
+        }
+        #careunit-results div:hover {
+            background-color: #f0f0f0;
+        }
+
+        #status-message {
+            margin-top: 1rem;
+            font-weight: bold;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Nueva Cama</h1>
+
+    <form id="cama-form">
+        <div>
+            <label for="bedCode-input">Código de Cama:</label>
+            <input type="text" id="bedCode-input" name="bedCode" required>
+        </div>
+
+        <div class="searchable-select">
+            <label for="careunit-search">Unidad de Cuidado:</label>
+            <div class="search-container">
+                <input type="text" id="careunit-search" placeholder="Escribe para buscar..." autocomplete="off" required>
+                <button type="button" id="latest-units-button" title="Mostrar las 10 más recientes">Recientes</button>
+            </div>
+            <input type="hidden" id="careunit-id-hidden">
+            <div id="careunit-results"></div>
+        </div>
+
+        <button type="submit">Guardar Cama</button>
+    </form>
+
+    <div id="status-message"></div>
+
+    <script>
+        // --- LÓGICA JAVASCRIPT ---
+
+        const API_BASE_URL = 'http://127.0.0.1:8000';
+        const CAREUNITS_LOOKUP_URL = `${API_BASE_URL}/Catalogos/UnidadesCuidados/lookup/`;
+        const BEDS_CREATE_URL = `${API_BASE_URL}/Catalogos/Camas/`;
+
+        const searchInput = document.getElementById('careunit-search');
+        const resultsDiv = document.getElementById('careunit-results');
+        const hiddenIdInput = document.getElementById('careunit-id-hidden');
+        const latestUnitsButton = document.getElementById('latest-units-button');
+
+        async function fetchAndRenderUnits(url) {
+            try {
+                const response = await fetch(url);
+                const unidades = await response.json();
+
+                resultsDiv.innerHTML = '';
+                resultsDiv.style.display = unidades.length > 0 ? 'block' : 'none';
+
+                unidades.slice(0, 10).forEach(unidad => {
+                    const resultItem = document.createElement('div');
+                    resultItem.textContent = unidad.idCareunit;
+                    resultItem.dataset.id = unidad.idCareunit;
+                    resultItem.addEventListener('click', () => {
+                        searchInput.value = unidad.idCareunit;
+                        hiddenIdInput.value = unidad.idCareunit;
+                        resultsDiv.style.display = 'none';
+                    });
+                    resultsDiv.appendChild(resultItem);
+                });
+            } catch (error) {
+                console.error('Error al obtener las unidades:', error);
+                resultsDiv.innerHTML = '<div>Error al cargar</div>';
+                resultsDiv.style.display = 'block';
+            }
+        }
+
+        let debounceTimer;
+        searchInput.addEventListener('input', () => {
+            const searchTerm = searchInput.value;
+            hiddenIdInput.value = '';
+
+            clearTimeout(debounceTimer);
+            if (searchTerm.length > 1) {
+                debounceTimer = setTimeout(() => {
+                    const searchUrl = `${CAREUNITS_LOOKUP_URL}?search=${encodeURIComponent(searchTerm)}`;
+                    fetchAndRenderUnits(searchUrl);
+                }, 300);
+            } else {
+                resultsDiv.style.display = 'none';
+            }
+        });
+
+        latestUnitsButton.addEventListener('click', () => {
+            searchInput.value = '';
+            hiddenIdInput.value = '';
+            const latestUrl = `${CAREUNITS_LOOKUP_URL}?ordering=-idCareunit`;
+            console.log("Pidiendo los más recientes desde:", latestUrl);
+            fetchAndRenderUnits(latestUrl);
+        });
+
+        document.addEventListener('click', (event) => {
+            if (!event.target.closest('.searchable-select')) {
+                resultsDiv.style.display = 'none';
+            }
+        });
+
+document.getElementById('cama-form').addEventListener('submit', async (event) => {
+    // 1. Prevenimos el envío tradicional del formulario
+    event.preventDefault();
+    const statusMessageElement = document.getElementById('status-message');
+    statusMessageElement.textContent = 'Guardando...';
+    statusMessageElement.style.color = '#333'; // Resetear color del mensaje
+
+    // 2. Recolectamos los datos de los inputs
+    const bedCode = document.getElementById('bedCode-input').value;
+    const careUnitId = document.getElementById('careunit-id-hidden').value;
+
+    // 3. Validación simple en el frontend
+    if (!careUnitId) {
+        statusMessageElement.textContent = 'Por favor, busque y seleccione una unidad de cuidado de la lista.';
+        statusMessageElement.style.color = 'red';
+        return;
+    }
+
+    // 4. Preparamos el objeto de datos que enviaremos a la API
+    const datosCama = {
+        bedCode: bedCode,
+        CareUnitFK: parseInt(careUnitId)
+    };
+
+    console.log("Enviando al backend:", datosCama);
+
+    // 5. Usamos un bloque try...catch para manejar el éxito y los errores
+    try {
+        // Hacemos la petición POST a la URL de creación de camas
+        const response = await fetch(BEDS_CREATE_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                // Si tu API requiere autenticación (ej. JWT), la cabecera iría aquí
+                // 'Authorization': `Bearer ${tuToken}`
+            },
+            body: JSON.stringify(datosCama) // Convertimos nuestro objeto a un string JSON
+        });
+
+        // Leemos la respuesta del servidor (sea de éxito o de error)
+        const responseData = await response.json();
+
+        // Si la respuesta NO fue exitosa (ej. error 400 por validación)
+        if (!response.ok) {
+            // Lanzamos un error con el mensaje que nos dio el backend
+            // DRF suele devolver los errores como un objeto: {"bedCode": ["Este campo es inválido."]}
+            throw new Error(JSON.stringify(responseData));
+        }
+
+        // Si la respuesta FUE exitosa (código 201 Created)
+        statusMessageElement.textContent = `¡Cama "${responseData.bedCode}" creada exitosamente en la unidad "${responseData.NombreUnidadCuidado}"!`;
+        statusMessageElement.style.color = 'green';
+
+        // Limpiamos el formulario para poder crear otra cama
+        document.getElementById('cama-form').reset();
+        // También limpiamos el ID oculto
+        document.getElementById('careunit-id-hidden').value = '';
+
+    } catch (error) {
+        // Si algo falla (error de red o error del servidor), lo mostramos
+        console.error('Error al guardar la cama:', error);
+        statusMessageElement.textContent = `Error al guardar: ${error.message}`;
+        statusMessageElement.style.color = 'red';
+    }
+});
+    </script>
+</body>
+</html>
