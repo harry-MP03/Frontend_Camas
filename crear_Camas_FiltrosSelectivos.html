@@ -191,29 +191,71 @@
             }
         });
 
-        document.getElementById('cama-form').addEventListener('submit', async (event) => {
-            event.preventDefault();
-            const statusMessageElement = document.getElementById('status-message');
+document.getElementById('cama-form').addEventListener('submit', async (event) => {
+    // 1. Prevenimos el envío tradicional del formulario
+    event.preventDefault();
+    const statusMessageElement = document.getElementById('status-message');
+    statusMessageElement.textContent = 'Guardando...';
+    statusMessageElement.style.color = '#333'; // Resetear color del mensaje
 
-            const bedCode = document.getElementById('bedCode-input').value;
-            const careUnitId = hiddenIdInput.value;
+    // 2. Recolectamos los datos de los inputs
+    const bedCode = document.getElementById('bedCode-input').value;
+    const careUnitId = document.getElementById('careunit-id-hidden').value;
 
-            if (!careUnitId) {
-                statusMessageElement.textContent = 'Por favor, busque y seleccione una unidad de cuidado de la lista.';
-                statusMessageElement.style.color = 'red';
-                return;
-            }
+    // 3. Validación simple en el frontend
+    if (!careUnitId) {
+        statusMessageElement.textContent = 'Por favor, busque y seleccione una unidad de cuidado de la lista.';
+        statusMessageElement.style.color = 'red';
+        return;
+    }
 
-            const datosCama = { bedCode: bedCode, CareUnitFK: parseInt(careUnitId) };
+    // 4. Preparamos el objeto de datos que enviaremos a la API
+    const datosCama = {
+        bedCode: bedCode,
+        CareUnitFK: parseInt(careUnitId)
+    };
 
-            statusMessageElement.textContent = `Simulando guardado: Cama '${datosCama.bedCode}' en Unidad ID '${datosCama.CareUnitFK}'`;
-            console.log("Enviando al backend:", datosCama);
-            // Aquí iría la lógica del fetch para guardar la cama...
+    console.log("Enviando al backend:", datosCama);
+
+    // 5. Usamos un bloque try...catch para manejar el éxito y los errores
+    try {
+        // Hacemos la petición POST a la URL de creación de camas
+        const response = await fetch(BEDS_CREATE_URL, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                // Si tu API requiere autenticación (ej. JWT), la cabecera iría aquí
+                // 'Authorization': `Bearer ${tuToken}`
+            },
+            body: JSON.stringify(datosCama) // Convertimos nuestro objeto a un string JSON
         });
 
-        document.addEventListener('DOMContentLoaded', () => {
-            latestUnitsButton.click();
-        });
+        // Leemos la respuesta del servidor (sea de éxito o de error)
+        const responseData = await response.json();
+
+        // Si la respuesta NO fue exitosa (ej. error 400 por validación)
+        if (!response.ok) {
+            // Lanzamos un error con el mensaje que nos dio el backend
+            // DRF suele devolver los errores como un objeto: {"bedCode": ["Este campo es inválido."]}
+            throw new Error(JSON.stringify(responseData));
+        }
+
+        // Si la respuesta FUE exitosa (código 201 Created)
+        statusMessageElement.textContent = `¡Cama "${responseData.bedCode}" creada exitosamente en la unidad "${responseData.NombreUnidadCuidado}"!`;
+        statusMessageElement.style.color = 'green';
+
+        // Limpiamos el formulario para poder crear otra cama
+        document.getElementById('cama-form').reset();
+        // También limpiamos el ID oculto
+        document.getElementById('careunit-id-hidden').value = '';
+
+    } catch (error) {
+        // Si algo falla (error de red o error del servidor), lo mostramos
+        console.error('Error al guardar la cama:', error);
+        statusMessageElement.textContent = `Error al guardar: ${error.message}`;
+        statusMessageElement.style.color = 'red';
+    }
+});
     </script>
 </body>
 </html>
